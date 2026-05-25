@@ -1,25 +1,27 @@
-# SMB Security Audit
+# SMB 安全审计与运维辅助工具
 
-Defensive SMB and Windows lateral-movement posture checker for authorized internal assessments. The tool checks SMB exposure, Windows security logs, local hardening settings, and management listener exposure without implementing pass-the-hash, credential attacks, or remote command execution.
+这是一个面向授权内网评估、Windows 运维和安全审计的防御型工具。它可以检查 SMB 暴露面、Windows 安全日志、本机加固配置、远程管理入口，并支持通过 SSH / WinRM 使用正常凭据执行授权运维命令。
 
-## Features
+本项目不实现 pass-the-hash、凭据喷洒或基于 SMB hash 的远程执行能力。
 
-- `scan`: SMB exposure and posture checks.
-- `logs`: Windows security event export analysis for SMB/NTLM lateral-movement signals.
-- `hardening`: Local Windows SMB/NTLM hardening checks.
-- `manage-check`: WinRM/SSH management listener exposure checks.
-- `exec`: Authorized remote command execution over SSH or WinRM with normal credentials.
+## 功能
 
-The `scan` command checks:
+- `scan`：检查 SMB 暴露面和常见安全配置风险。
+- `logs`：分析 Windows 安全日志导出文件，识别 SMB / NTLM 横向移动相关信号。
+- `hardening`：检查本机 Windows SMB / NTLM 加固配置。
+- `manage-check`：检查 WinRM / SSH 远程管理端口暴露情况。
+- `exec`：通过 SSH 或 WinRM 使用正常凭据执行授权运维命令。
 
-- TCP/445 and TCP/139 reachability.
-- SMB dialect negotiation when `impacket` is installed.
-- SMBv1 detection.
-- SMB signing requirement detection when exposed by the SMB stack.
-- Optional anonymous/null-session exposure with `--check-anonymous`.
-- JSON and CSV report output.
+`scan` 命令会检查：
 
-## Install
+- TCP/445 和 TCP/139 是否开放。
+- 安装 `impacket` 后进行 SMB 协议协商。
+- 是否启用 SMBv1。
+- SMB 签名是否强制启用。
+- 使用 `--check-anonymous` 可选检查匿名 / 空会话访问风险。
+- 支持 JSON 和 CSV 报告输出。
+
+## 安装
 
 ```bash
 python -m venv .venv
@@ -27,7 +29,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-On Windows PowerShell:
+Windows PowerShell：
 
 ```powershell
 python -m venv .venv
@@ -35,100 +37,100 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Usage
+## 使用方法
 
-Scan one SMB host:
+扫描单个 SMB 主机：
 
 ```bash
 python smb_security_audit.py scan 192.168.1.10
 ```
 
-Scan a CIDR range and write reports:
+扫描 CIDR 网段并输出报告：
 
 ```bash
 python smb_security_audit.py scan 192.168.1.0/24 --json report.json --csv report.csv
 ```
 
-Check for anonymous SMB access:
+检查匿名 SMB 访问：
 
 ```bash
 python smb_security_audit.py scan 192.168.1.10 --check-anonymous
 ```
 
-Use a target file:
+使用目标文件：
 
 ```bash
 python smb_security_audit.py scan --targets-file targets.txt
 ```
 
-Analyze exported Windows security events:
+分析 Windows 安全日志导出文件：
 
 ```bash
 python smb_security_audit.py logs security-events.csv --json log-findings.json
 ```
 
-Supported event input formats are CSV, JSON, and XML. Useful event IDs include 4624, 4625, 4672, 4776, and 5140.
+日志输入支持 CSV、JSON 和 XML。建议重点关注 Event ID：4624、4625、4672、4776、5140。
 
-Check local Windows hardening settings:
+检查本机 Windows 加固配置：
 
 ```bash
 python smb_security_audit.py hardening --json hardening.json
 ```
 
-Check remote management listener exposure:
+检查远程管理入口暴露情况：
 
 ```bash
 python smb_security_audit.py manage-check 192.168.1.0/24 --csv management.csv
 ```
 
-Preview an authorized SSH command without executing it:
+预览授权 SSH 命令，不实际执行：
 
 ```bash
 python smb_security_audit.py exec 192.168.1.10 --protocol ssh --username admin --command "hostname"
 ```
 
-Execute over SSH after reviewing the target and command:
+确认目标和命令后，通过 SSH 执行：
 
 ```bash
 python smb_security_audit.py exec 192.168.1.10 --protocol ssh --username admin --ssh-key ~/.ssh/id_ed25519 --command "hostname" --yes
 ```
 
-Execute over WinRM using a password from an environment variable:
+通过 WinRM 执行，并从环境变量读取密码：
 
 ```bash
 export OPS_PASSWORD='change-me'
 python smb_security_audit.py exec 192.168.1.10 --protocol winrm --username 'DOMAIN\admin' --password-env OPS_PASSWORD --command "whoami" --yes
 ```
 
-On Windows PowerShell:
+Windows PowerShell：
 
 ```powershell
 $env:OPS_PASSWORD = "change-me"
 python smb_security_audit.py exec 192.168.1.10 --protocol winrm --username "DOMAIN\admin" --password-env OPS_PASSWORD --command "whoami" --yes
 ```
 
-The `exec` command defaults to dry-run mode. Add `--yes` only after confirming the target list and command. Passwords should be supplied with `--password-env` or `--ask-password`, not directly in shell history.
+`exec` 命令默认是 dry-run 模式，不会真正执行远程命令。确认目标列表和命令无误后再添加 `--yes`。密码建议通过 `--password-env` 或 `--ask-password` 提供，不要直接写在命令行历史中。
 
-## Interpreting Results
+## 结果解读
 
-- `SMBv1 is enabled`: disable SMBv1 and require SMB 2.1+ or SMB 3.x.
-- `SMB signing is not required`: require SMB signing where integrity matters.
-- `Anonymous SMB session is allowed`: restrict null sessions and review share permissions.
-- `TCP/445 is open but SMB details could not be collected`: install `impacket`, validate firewall policy, or inspect SMB negotiation controls.
-- `Successful network logon used NTLM`: correlate source host, user, privilege events, and administrative share access.
-- `WinRM HTTP listener is reachable`: verify authentication and message encryption policy; prefer HTTPS or Kerberos-protected administrative networks.
+- `SMBv1 is enabled`：目标启用了 SMBv1，建议禁用 SMBv1，并使用 SMB 2.1+ 或 SMB 3.x。
+- `SMB signing is not required`：SMB 签名未强制启用，敏感服务器建议强制开启 SMB signing。
+- `Anonymous SMB session is allowed`：允许匿名 SMB 会话，建议限制空会话并检查共享权限。
+- `TCP/445 is open but SMB details could not be collected`：TCP/445 开放，但未能收集 SMB 细节；可安装 `impacket` 或检查防火墙、SMB 协商策略。
+- `Successful network logon used NTLM`：发现 NTLM 网络登录，建议结合来源主机、账号、特权登录和管理共享访问进行关联分析。
+- `WinRM HTTP listener is reachable`：WinRM HTTP 可达，建议确认认证、消息加密策略，并优先使用 HTTPS 或受 Kerberos 保护的管理网络。
 
-## Defensive Follow-Up
+## 加固建议
 
-Recommended Windows hardening actions:
+推荐的 Windows 加固动作：
 
-- Disable SMBv1.
-- Require SMB signing for sensitive server roles.
-- Restrict NTLM where Kerberos is available.
-- Limit local administrator reuse across hosts.
-- Monitor Event ID 4624 logon type 3, 4672 privileged logons, and unusual share access.
-- Review administrative shares and anonymous/null-session policies.
+- 禁用 SMBv1。
+- 对敏感服务器强制启用 SMB signing。
+- 在条件允许时限制 NTLM，优先使用 Kerberos。
+- 避免多台主机复用相同本地管理员账号和密码。
+- 监控 Event ID 4624 Logon Type 3、4672 特权登录，以及异常共享访问。
+- 定期检查管理共享和匿名 / 空会话策略。
 
-## Scope
+## 使用范围
 
-Use this only on systems where you have explicit authorization to perform security assessment.
+仅在你拥有明确授权的系统、网络和账号范围内使用本工具。
